@@ -128,174 +128,191 @@ jobs:
       - name: Check changed files
         id: check
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "run_ansible_lint=true" >> $GITHUB_OUTPUT
-            echo "run_css_lint=true" >> $GITHUB_OUTPUT
-            echo "run_js_lint=true" >> $GITHUB_OUTPUT
-            echo "run_twig_lint=true" >> $GITHUB_OUTPUT
-            echo "run_php_lint=true" >> $GITHUB_OUTPUT
-            echo "run_python_lint=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            diff_base=${{ github.base_ref }}
-          else
-            diff_base=${{ github.event.before }}
-          fi
-          changed_ansible=$(git diff --name-only $diff_base ${{ github.sha }} | grep -E '^\.setup/ansible/' || true)
-          changed_css=$(git diff --name-only $diff_base ${{ github.sha }} | grep -E '.*\.(css|scss)$' || true)
-          changed_js=$(git diff --name-only $diff_base ${{ github.sha }} | grep -E '.*\.(js|jsx|ts|tsx)$' || true)
-          changed_twig=$(git diff --name-only $diff_base ${{ github.sha }} | grep -E '(app|public|room_templates)/.*\.twig$' || true)
-          changed_php=$(git diff --name-only $diff_base ${{ github.sha }} | grep -E '.*\.php$' || true)
-          changed_python=$(git diff --name-only $diff_base ${{ github.sha }} | grep -E '.*\.py$' || true)
+          case "${{ github.event_name }}" in
+            "workflow_dispatch")
+              for key in ansible css js twig php python; do
+                echo "run_${key}_lint=true" >> $GITHUB_OUTPUT
+              done
+              exit 0
+              ;;
+            "pull_request")
+              diff_base=${{ github.base_ref }}
+              ;;
+            *)
+              diff_base=${{ github.event.before }}
+              ;;
+          esac
+          changed_files=$(git diff --name-only "$diff_base" "${{ github.sha }}")
+          changed_ansible=$(printf "%s\n" "$changed_files" | grep -E '^\.setup/ansible/' || true)
+          changed_css=$(printf "%s\n" "$changed_files" | grep -E '.*\.(css|scss)$' || true)
+          changed_js=$(printf "%s\n" "$changed_files" | grep -E '.*\.(js|jsx|ts|tsx)$' || true)
+          changed_twig=$(printf "%s\n" "$changed_files" | grep -E '(app|public|room_templates)/.*\.twig$' || true)
+          changed_php=$(printf "%s\n" "$changed_files" | grep -E '.*\.php$' || true)
+          changed_python=$(printf "%s\n" "$changed_files" | grep -E '.*\.py$' || true)
           [ -n "$changed_ansible" ] && echo "run_ansible_lint=true" >> $GITHUB_OUTPUT || echo "run_ansible_lint=false" >> $GITHUB_OUTPUT
           [ -n "$changed_css" ] && echo "run_css_lint=true" >> $GITHUB_OUTPUT || echo "run_css_lint=false" >> $GITHUB_OUTPUT
           [ -n "$changed_js" ] && echo "run_js_lint=true" >> $GITHUB_OUTPUT || echo "run_js_lint=false" >> $GITHUB_OUTPUT
           [ -n "$changed_twig" ] && echo "run_twig_lint=true" >> $GITHUB_OUTPUT || echo "run_twig_lint=false" >> $GITHUB_OUTPUT
           [ -n "$changed_php" ] && echo "run_php_lint=true" >> $GITHUB_OUTPUT || echo "run_php_lint=false" >> $GITHUB_OUTPUT
           [ -n "$changed_python" ] && echo "run_python_lint=true" >> $GITHUB_OUTPUT || echo "run_python_lint=false" >> $GITHUB_OUTPUT
-  ansible-lint:
-    name: Ansible Lint
+  lint:
+    name: Language Lint
     runs-on: ubuntu-22.04
     needs: [js-unit, php-unit, python-unit, check-changed-files]
-    if: needs.check-changed-files.outputs.run_ansible_lint == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ansible, css, js, twig, php, python]
+    # gating handled in steps via gate step using a switch-case
     steps:
       - uses: actions/checkout@v4
-      - name: Run ansible-lint
-        uses: ansible/ansible-lint@main
-        with:
-          args: .setup/ansible
-  css-lint:
-    name: CSS Lint
-    runs-on: ubuntu-22.04
-    needs: [js-unit, php-unit, python-unit, check-changed-files]
-    if: needs.check-changed-files.outputs.run_css_lint == 'true'
-    defaults:
-      run:
-        working-directory: site
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Gate lint by changed files
+        id: gate
+        run: |
+          case "${{ matrix.language }}" in
+            ansible)
+              flag="${{ needs.check-changed-files.outputs.run_ansible_lint }}"
+              ;;
+            css)
+              flag="${{ needs.check-changed-files.outputs.run_css_lint }}"
+              ;;
+            js)
+              flag="${{ needs.check-changed-files.outputs.run_js_lint }}"
+              ;;
+            twig)
+              flag="${{ needs.check-changed-files.outputs.run_twig_lint }}"
+              ;;
+            php)
+              flag="${{ needs.check-changed-files.outputs.run_php_lint }}"
+              ;;
+            python)
+              flag="${{ needs.check-changed-files.outputs.run_python_lint }}"
+              ;;
+            *)
+              flag="false"
+              ;;
+          esac
+          echo "should_run=$flag" >> $GITHUB_OUTPUT
+
+      - name: Setup Node
+        if: (matrix.language == 'css' || matrix.language == 'js') && steps.gate.outputs.should_run == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
       - name: Cache Node Modules
+        if: (matrix.language == 'css' || matrix.language == 'js') && steps.gate.outputs.should_run == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.npm
           key: ${{ runner.os }}-cache-node-modules-${{ hashFiles('**/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-cache-node-modules-
-      - run: npm ci
+
+      - name: npm ci
+        if: (matrix.language == 'css' || matrix.language == 'js') && steps.gate.outputs.should_run == 'true'
+        working-directory: site
+        run: npm ci
+
       - name: Run stylelint
+        if: matrix.language == 'css' && steps.gate.outputs.should_run == 'true'
+        working-directory: site
         run: npm run css-stylelint
+
       - name: Run Prettier Format
+        if: matrix.language == 'css' && steps.gate.outputs.should_run == 'true'
+        working-directory: site
         run: npm run prettier:fix
-      - run: git diff --exit-code
-  js-lint:
-    name: JavaScript Lint
-    runs-on: ubuntu-22.04
-    needs: [js-unit, php-unit, python-unit, check-changed-files]
-    if: needs.check-changed-files.outputs.run_js_lint == 'true'
-    defaults:
-      run:
+
+      - name: Check Prettier Changes
+        if: matrix.language == 'css' && steps.gate.outputs.should_run == 'true'
         working-directory: site
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Cache Node Modules
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-cache-node-modules-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-cache-node-modules-
-      - run: npm ci
+        run: git diff --exit-code
+
       - name: Run eslint
+        if: matrix.language == 'js' && steps.gate.outputs.should_run == 'true'
+        working-directory: site
         run: npm run eslint
+
       - name: Run npm build (tsc and esbuild)
+        if: matrix.language == 'js' && steps.gate.outputs.should_run == 'true'
+        working-directory: site
         run: npm run build
-  twig-lint:
-    name: Twig Lint
-    runs-on: ubuntu-22.04
-    needs: [js-unit, php-unit, python-unit, check-changed-files]
-    if: needs.check-changed-files.outputs.run_twig_lint == 'true'
-    defaults:
-      run:
-        working-directory: site
-    steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@2.33.0
+
+      - name: Setup PHP
+        if: (matrix.language == 'twig' || matrix.language == 'php') && steps.gate.outputs.should_run == 'true'
+        uses: shivammathur/setup-php@2.33.0
         with:
           php-version: ${{ env.PHP_VER }}
+
       - name: Cache Composer
+        if: (matrix.language == 'twig' || matrix.language == 'php') && steps.gate.outputs.should_run == 'true'
         id: composer-cache
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
       - name: Install Composer
+        if: (matrix.language == 'twig' || matrix.language == 'php') && steps.gate.outputs.should_run == 'true'
         uses: actions/cache@v4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
           restore-keys: |
             ${{ runner.os }}-composer-
-      - name: Install dependencies
+
+      - name: Install PHP dependencies
+        if: (matrix.language == 'twig' || matrix.language == 'php') && steps.gate.outputs.should_run == 'true'
+        working-directory: site
         run: composer install --prefer-dist --dev
+
       - name: Lint Twig Templates
-        run: php scripts/symfony_console lint:twig --format=github app/ public/ room_templates/
-  php-lint:
-    name: PHP Lint
-    runs-on: ubuntu-22.04
-    needs: [js-unit, php-unit, python-unit, check-changed-files]
-    if: needs.check-changed-files.outputs.run_php_lint == 'true'
-    defaults:
-      run:
+        if: matrix.language == 'twig' && steps.gate.outputs.should_run == 'true'
         working-directory: site
-    steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@2.33.0
-        with:
-          php-version: ${{ env.PHP_VER }}
-      - name: Cache Composer
-        id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
-      - name: Install Composer
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.composer-cache.outputs.dir }}
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-composer-
-      - name: Install dependencies
-        run: composer install --prefer-dist --dev
+        run: php scripts/symfony_console lint:twig --format=github app/ public/ room_templates/
+
       - name: Check syntax
+        if: matrix.language == 'php' && steps.gate.outputs.should_run == 'true'
+        working-directory: site
         run: find -L . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n 1 -P 4 php -l
+
       - name: Lint PHP code
+        if: matrix.language == 'php' && steps.gate.outputs.should_run == 'true'
+        working-directory: site
         run: |
           php vendor/bin/phpcs --version
           php vendor/bin/phpcs
+
       - name: Static analysis
+        if: matrix.language == 'php' && steps.gate.outputs.should_run == 'true'
+        working-directory: site
         run: |
           php vendor/bin/phpstan --version
           php vendor/bin/phpstan analyze app public/index.php socket/index.php
-  python-lint:
-    name: Python Lint
-    runs-on: ubuntu-22.04
-    needs: [js-unit, php-unit, python-unit, check-changed-files]
-    if: needs.check-changed-files.outputs.run_python_lint == 'true'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Setup Python
+        if: matrix.language == 'python' && steps.gate.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Cache Pip
+        if: matrix.language == 'python' && steps.gate.outputs.should_run == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-${{ github.job }}-pip-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-${{ github.job }}-pip-
+
       - name: Install python libraries
+        if: matrix.language == 'python' && steps.gate.outputs.should_run == 'true'
         run: python3 -m pip install -r .setup/pip/dev_requirements.txt
+
       - name: Run pre-commit
+        if: matrix.language == 'python' && steps.gate.outputs.should_run == 'true'
         run: pre-commit run --all-files
+
+      - name: Run ansible-lint
+        if: matrix.language == 'ansible' && steps.gate.outputs.should_run == 'true'
+        uses: ansible/ansible-lint@main
+        with:
+          args: .setup/ansible
