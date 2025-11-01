@@ -156,53 +156,49 @@ jobs:
           [ -n "$changed_twig" ] && echo "run_twig_lint=true" >> $GITHUB_OUTPUT || echo "run_twig_lint=false" >> $GITHUB_OUTPUT
           [ -n "$changed_php" ] && echo "run_php_lint=true" >> $GITHUB_OUTPUT || echo "run_php_lint=false" >> $GITHUB_OUTPUT
           [ -n "$changed_python" ] && echo "run_python_lint=true" >> $GITHUB_OUTPUT || echo "run_python_lint=false" >> $GITHUB_OUTPUT
+  prepare-lint-matrix:
+    name: Prepare Lint Matrix
+    runs-on: ubuntu-22.04
+    needs: [check-changed-files]
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - name: Build matrix
+        id: build
+        run: |
+          langs=(ansible css js twig php python)
+          runs=("${{ needs.check-changed-files.outputs.run_ansible_lint }}" "${{ needs.check-changed-files.outputs.run_css_lint }}" "${{ needs.check-changed-files.outputs.run_js_lint }}" "${{ needs.check-changed-files.outputs.run_twig_lint }}" "${{ needs.check-changed-files.outputs.run_php_lint }}" "${{ needs.check-changed-files.outputs.run_python_lint }}")
+          sep=""
+          json='{"include":['
+          for i in "${!langs[@]}"; do
+            lang="${langs[$i]}"
+            run_flag="${runs[$i]}"
+            if [ "$run_flag" = "true" ]; then
+              json="$json$sep{\"language\":\"$lang\"}"
+              sep=","
+            fi
+          done
+          json="$json]}"
+          echo "matrix=$json" >> $GITHUB_OUTPUT
   lint:
     name: Language Lint
     runs-on: ubuntu-22.04
-    needs: [js-unit, php-unit, python-unit, check-changed-files]
+    needs:
+      [js-unit, php-unit, python-unit, check-changed-files, prepare-lint-matrix]
     strategy:
       fail-fast: false
-      matrix:
-        language: [ansible, css, js, twig, php, python]
-    # gating handled in steps via gate step using a switch-case
+      matrix: ${{ fromJSON(needs.prepare-lint-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - name: Gate lint by changed files
-        id: gate
-        run: |
-          case "${{ matrix.language }}" in
-            ansible)
-              flag="${{ needs.check-changed-files.outputs.run_ansible_lint }}"
-              ;;
-            css)
-              flag="${{ needs.check-changed-files.outputs.run_css_lint }}"
-              ;;
-            js)
-              flag="${{ needs.check-changed-files.outputs.run_js_lint }}"
-              ;;
-            twig)
-              flag="${{ needs.check-changed-files.outputs.run_twig_lint }}"
-              ;;
-            php)
-              flag="${{ needs.check-changed-files.outputs.run_php_lint }}"
-              ;;
-            python)
-              flag="${{ needs.check-changed-files.outputs.run_python_lint }}"
-              ;;
-            *)
-              flag="false"
-              ;;
-          esac
-          echo "should_run=$flag" >> $GITHUB_OUTPUT
 
       - name: Setup Node
-        if: (matrix.language == 'css' || matrix.language == 'js') && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'css' || matrix.language == 'js'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Cache Node Modules
-        if: (matrix.language == 'css' || matrix.language == 'js') && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'css' || matrix.language == 'js'
         uses: actions/cache@v4
         with:
           path: ~/.npm
@@ -211,48 +207,48 @@ jobs:
             ${{ runner.os }}-cache-node-modules-
 
       - name: npm ci
-        if: (matrix.language == 'css' || matrix.language == 'js') && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'css' || matrix.language == 'js'
         working-directory: site
         run: npm ci
 
       - name: Run stylelint
-        if: matrix.language == 'css' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'css'
         working-directory: site
         run: npm run css-stylelint
 
       - name: Run Prettier Format
-        if: matrix.language == 'css' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'css'
         working-directory: site
         run: npm run prettier:fix
 
       - name: Check Prettier Changes
-        if: matrix.language == 'css' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'css'
         working-directory: site
         run: git diff --exit-code
 
       - name: Run eslint
-        if: matrix.language == 'js' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'js'
         working-directory: site
         run: npm run eslint
 
       - name: Run npm build (tsc and esbuild)
-        if: matrix.language == 'js' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'js'
         working-directory: site
         run: npm run build
 
       - name: Setup PHP
-        if: (matrix.language == 'twig' || matrix.language == 'php') && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'twig' || matrix.language == 'php'
         uses: shivammathur/setup-php@2.33.0
         with:
           php-version: ${{ env.PHP_VER }}
 
       - name: Cache Composer
-        if: (matrix.language == 'twig' || matrix.language == 'php') && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'twig' || matrix.language == 'php'
         id: composer-cache
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
 
       - name: Install Composer
-        if: (matrix.language == 'twig' || matrix.language == 'php') && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'twig' || matrix.language == 'php'
         uses: actions/cache@v4
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
@@ -261,42 +257,42 @@ jobs:
             ${{ runner.os }}-composer-
 
       - name: Install PHP dependencies
-        if: (matrix.language == 'twig' || matrix.language == 'php') && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'twig' || matrix.language == 'php'
         working-directory: site
         run: composer install --prefer-dist --dev
 
       - name: Lint Twig Templates
-        if: matrix.language == 'twig' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'twig'
         working-directory: site
         run: php scripts/symfony_console lint:twig --format=github app/ public/ room_templates/
 
       - name: Check syntax
-        if: matrix.language == 'php' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'php'
         working-directory: site
         run: find -L . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n 1 -P 4 php -l
 
       - name: Lint PHP code
-        if: matrix.language == 'php' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'php'
         working-directory: site
         run: |
           php vendor/bin/phpcs --version
           php vendor/bin/phpcs
 
       - name: Static analysis
-        if: matrix.language == 'php' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'php'
         working-directory: site
         run: |
           php vendor/bin/phpstan --version
           php vendor/bin/phpstan analyze app public/index.php socket/index.php
 
       - name: Setup Python
-        if: matrix.language == 'python' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'python'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Cache Pip
-        if: matrix.language == 'python' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'python'
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
@@ -305,15 +301,15 @@ jobs:
             ${{ runner.os }}-${{ github.job }}-pip-
 
       - name: Install python libraries
-        if: matrix.language == 'python' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'python'
         run: python3 -m pip install -r .setup/pip/dev_requirements.txt
 
       - name: Run pre-commit
-        if: matrix.language == 'python' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'python'
         run: pre-commit run --all-files
 
       - name: Run ansible-lint
-        if: matrix.language == 'ansible' && steps.gate.outputs.should_run == 'true'
+        if: matrix.language == 'ansible'
         uses: ansible/ansible-lint@main
         with:
           args: .setup/ansible
