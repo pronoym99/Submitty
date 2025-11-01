@@ -3,8 +3,11 @@ on:
   push:
     branches:
       - main
-      - ci-optimize
+    paths-ignore:
+      - "**/*.md"
   pull_request:
+    paths-ignore:
+      - "**/*.md"
   workflow_dispatch:
 env:
   PGPASSWORD: submitty_dbuser
