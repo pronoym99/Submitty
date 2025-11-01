@@ -1,7 +1,5 @@
 # How to Contribute
 
-
-
 Please Read:
 
 * [How to Make a Pull Request](https://submitty.org/developer/getting_started/make_a_pull_request)
