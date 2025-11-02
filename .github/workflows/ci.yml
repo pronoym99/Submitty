@@ -77,9 +77,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-composer-
       - name: Install dependencies
-        run: composer install --prefer-dist --dev --no-interaction --no-progress
-      - name: Run php unit tests in parallel (ParaTest)
-        run: php vendor/bin/paratest --processes=auto --runner=WrapperRunner
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Run php unit tests
+        run: php vendor/bin/phpunit
       - name: Upload Coverage
         uses: codecov/codecov-action@v5
         with:
@@ -270,7 +270,7 @@ jobs:
       - name: Install PHP dependencies
         if: matrix.language == 'twig' || matrix.language == 'php'
         working-directory: site
-        run: composer install --prefer-dist --dev --no-interaction --no-progress
+        run: composer install --prefer-dist --no-interaction --no-progress
 
       - name: Lint Twig Templates
         if: matrix.language == 'twig'
