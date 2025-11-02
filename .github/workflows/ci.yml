@@ -78,8 +78,8 @@ jobs:
             ${{ runner.os }}-composer-
       - name: Install dependencies
         run: composer install --prefer-dist --dev --no-interaction --no-progress
-      - name: Run php unit tests
-        run: php vendor/bin/phpunit
+      - name: Run php unit tests in parallel (ParaTest)
+        run: php vendor/bin/paratest --processes=auto --runner=WrapperRunner
       - name: Upload Coverage
         uses: codecov/codecov-action@v5
         with:
