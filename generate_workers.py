@@ -33,7 +33,7 @@ def main():
     if len(glob.glob(os.path.join(rootdir, '.vagrant', 'machines', '*', '*', 'action_provision'))):
         if input("Warning: There are existing vagrant machines in this project that may conflict"
                  " with new configuration. Are you sure you would like to proceed? [y/N] "
-                 )[0].lower() != 'y':
+                 )[0].lower()!='y':
             return
 
     if os.path.isfile(workerfile):
