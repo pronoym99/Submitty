@@ -68,6 +68,7 @@ jobs:
           coverage: pcov
       - name: Cache Composer
         id: composer-cache
+        working-directory: site
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
       - name: Ensure Composer cache dir exists
         run: mkdir -p "${{ steps.composer-cache.outputs.dir }}"
@@ -261,6 +262,7 @@ jobs:
       - name: Cache Composer
         if: matrix.language == 'twig' || matrix.language == 'php'
         id: composer-cache
+        working-directory: site
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
 
       - name: Ensure Composer cache dir exists
