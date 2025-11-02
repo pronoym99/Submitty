@@ -99,9 +99,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-${{ github.job }}-pip-${{ hashFiles('**/system_requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-${{ hashFiles('.setup/pip/system_requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-${{ github.job }}-pip-
+            ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-
       - name: Install python libraries
         run: |
           python3 -m pip install -q --disable-pip-version-check -r .setup/pip/system_requirements.txt
@@ -307,9 +307,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-${{ github.job }}-pip-${{ github.sha }}
+          key: ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-${{ hashFiles('.setup/pip/dev_requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-${{ github.job }}-pip-
+            ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-
 
       - name: Install python libraries
         if: matrix.language == 'python'
