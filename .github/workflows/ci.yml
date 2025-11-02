@@ -69,6 +69,8 @@ jobs:
       - name: Cache Composer
         id: composer-cache
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+      - name: Ensure Composer cache dir exists
+        run: mkdir -p "${{ steps.composer-cache.outputs.dir }}"
       - name: Install Composer
         uses: actions/cache@v4
         with:
@@ -260,6 +262,10 @@ jobs:
         if: matrix.language == 'twig' || matrix.language == 'php'
         id: composer-cache
         run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Ensure Composer cache dir exists
+        if: matrix.language == 'twig' || matrix.language == 'php'
+        run: mkdir -p "${{ steps.composer-cache.outputs.dir }}"
 
       - name: Install Composer
         if: matrix.language == 'twig' || matrix.language == 'php'
