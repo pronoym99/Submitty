@@ -36,6 +36,7 @@ class ChatroomController extends AbstractController {
      *     role?:       string,
      *     timestamp?:  string
      * } $msg_array
+     *
      */
     private function sendSocketMessage(array $msg_array): void {
         $msg_array['page'] = $this->core->getConfig()->getTerm() . '-' . $this->core->getConfig()->getCourse() . '-' . $msg_array['socket'];

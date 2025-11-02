@@ -290,7 +290,12 @@ jobs:
         working-directory: site
         run: |
           php vendor/bin/phpcs --version
-          php vendor/bin/phpcs
+          php vendor/bin/phpcs --cache=.phpcs-cache
+      - name: Ensure PHPCS cache file exists
+        if: matrix.language == 'php'
+        working-directory: site
+        run: |
+          test -f .phpcs-cache || touch .phpcs-cache
 
       - name: Static analysis
         if: matrix.language == 'php'
