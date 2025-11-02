@@ -166,6 +166,7 @@ jobs:
     needs: [check-changed-files]
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
+      any_lint: ${{ steps.build.outputs.any_lint }}
     steps:
       - name: Build matrix
         id: build
@@ -182,6 +183,11 @@ jobs:
               sep=","
             fi
           done
+          if [ "$sep" = "" ]; then
+            echo "any_lint=false" >> $GITHUB_OUTPUT
+          else
+            echo "any_lint=true" >> $GITHUB_OUTPUT
+          fi
           json="$json]}"
           echo "matrix=$json" >> $GITHUB_OUTPUT
   lint:
@@ -192,6 +198,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare-lint-matrix.outputs.matrix) }}
+    if: needs.prepare-lint-matrix.outputs.any_lint == 'true'
     steps:
       - uses: actions/checkout@v4
 
