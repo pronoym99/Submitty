@@ -103,6 +103,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-
       - name: Install python libraries
+        env:
+          PIP_CACHE_DIR: ~/.cache/pip
         run: |
           python3 -m pip install -q --disable-pip-version-check -r .setup/pip/system_requirements.txt
           python3 -m pip install -q --disable-pip-version-check coverage # Testing util.
@@ -310,9 +312,10 @@ jobs:
           key: ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-${{ hashFiles('.setup/pip/dev_requirements.txt') }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}-
-
       - name: Install python libraries
         if: matrix.language == 'python'
+        env:
+          PIP_CACHE_DIR: ~/.cache/pip
         run: python3 -m pip install -q --disable-pip-version-check -r .setup/pip/dev_requirements.txt
 
       - name: Cache pre-commit
@@ -326,12 +329,15 @@ jobs:
 
       - name: Run pre-commit
         if: matrix.language == 'python'
+        env:
+          PRE_COMMIT_HOME: ~/.cache/pre-commit
+          PIP_CACHE_DIR: ~/.cache/pip
         run: |
-          git fetch --prune --unshallow || true
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
+            git fetch --depth=1 origin ${{ github.base_ref }}:${{ github.base_ref }}
             pre-commit run --from-ref "${{ github.base_ref }}" --to-ref "${{ github.sha }}"
           else
+            git fetch --depth=1 origin ${{ github.event.before }}
             pre-commit run --from-ref "${{ github.event.before }}" --to-ref "${{ github.sha }}"
           fi
 
