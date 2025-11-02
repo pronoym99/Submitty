@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - ci-optimize
     paths-ignore:
       - "**/*.md"
   pull_request:
