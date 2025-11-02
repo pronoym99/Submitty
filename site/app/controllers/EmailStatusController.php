@@ -18,6 +18,7 @@ class EmailStatusController extends AbstractController {
     /**
      * @AccessControl(role="INSTRUCTOR")
      * @return WebResponse
+     *
      */
     #[Route("/courses/{_semester}/{_course}/email_status", methods: ["GET"])]
     public function getEmailStatusPage(): WebResponse {
